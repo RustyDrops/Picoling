@@ -1,0 +1,27 @@
+# Picoling .gitignore
+# Protect secrets and internal runtime state from version control
+
+# === Secrets (NEVER commit) ===
+secrets.py
+
+# === Runtime state files (generated on-device) ===
+soul.json
+soul.json.tmp
+state.json
+state.json.tmp
+stats.json
+stats.json.tmp
+memory.txt
+memory.txt.tmp
+memory_index.json
+memory_index.json.tmp
+journal.log
+
+# === Compiled MicroPython bytecode ===
+*.mpy
+__pycache__/
+
+# === OS junk ===
+.DS_Store
+Thumbs.db
+desktop.ini
