@@ -276,11 +276,14 @@ def _execute_plan(steps, original_goal):
             model = api_client.MODEL_31_LITE
             call_type = "chat"
             grounding = False
+            tools = get_tools_full()
 
             if agent == "researcher":
                 model = api_client.MODEL_25_LITE
                 call_type = "research"
                 grounding = budget.can_use_grounding()
+                if grounding:
+                    tools = None # Cannot combine grounding with function calling
             elif agent == "coder":
                 call_type = "coding"
                 thinking = "high"
@@ -293,7 +296,7 @@ def _execute_plan(steps, original_goal):
 
             result = api_client.call_gemini_sync(
                 messages, model=model, sys_instr=role_prompt,
-                tools=get_tools_full(),
+                tools=tools,
                 tier="flex", thinking_level=thinking,
                 call_type=call_type, grounding=grounding
             )
