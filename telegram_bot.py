@@ -7,7 +7,7 @@ from locks import net_lock
 _SEND_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
 
-def send_telegram_msg(text, max_len=280):
+def send_telegram_msg(text, max_len=2000):
     """Send a message to the authorized Telegram chat.
     Messages are capped at max_len chars for concise updates."""
     if len(text) > max_len:

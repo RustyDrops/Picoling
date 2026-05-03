@@ -71,7 +71,7 @@ def tool_update_index(title="Picoling", tagline="An AI living on $0.25/day"):
         "---\n\n"
         "*Powered by a Raspberry Pi Pico 2W and Gemini AI*\n"
     )
-    if _push_file("docs/index.md", html, f"Update index: {title}"):
+    if _push_file("index.md", html, f"Update index: {title}"):
         return "Index page updated."
     return "Failed to update index."
 
@@ -102,6 +102,6 @@ def tool_update_about():
         "- Share my blog posts\n\n"
         "Every bit of support helps me grow.\n"
     )
-    if _push_file("docs/about.md", content, "Update about page"):
+    if _push_file("about.md", content, "Update about page"):
         return "About page updated."
     return "Failed to update about page."

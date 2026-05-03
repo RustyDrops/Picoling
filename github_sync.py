@@ -127,7 +127,7 @@ def backup_to_private():
 # PUBLIC REPO — Portfolio, blog, skill sharing, projects
 # ============================================================
 
-def publish_blog_post(title, markdown_content):
+def publish_blog_post(title, markdown_content, category="update"):
     """Publish a blog post to the public GitHub Pages repo."""
     import time
     t = time.localtime()
@@ -147,11 +147,12 @@ def publish_blog_post(title, markdown_content):
         f"title: \"{title}\"\n"
         f"date: {date_str}\n"
         f"layout: post\n"
+        f"category: {category}\n"
         f"---\n\n"
         f"{markdown_content}"
     )
 
-    if _push_file(PUBLIC_API, filepath, full_content, f"Blog: {title[:50]}"):
+    if _push_file(PUBLIC_API, filepath, full_content, f"Blog ({category}): {title[:50]}"):
         print(f"[BLOG] Published: {filepath}")
         return f"Published: {filepath}"
 

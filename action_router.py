@@ -74,6 +74,9 @@ def execute_action(name, args):
             return "Rebooting..."
 
         elif name == "telegram_send":
+            msg = args.get("message", "")
+            telegram_bot.send_telegram_msg(msg)
+            return "Message sent."
 
         elif name == "manage_tasks":
             action = args.get("action", "add")
@@ -125,7 +128,8 @@ def execute_action(name, args):
             from github_sync import publish_blog_post
             return publish_blog_post(
                 args.get("title", "Untitled"),
-                args.get("content", "")
+                args.get("content", ""),
+                args.get("category", "update")
             )
 
         elif name == "publish_skill":
@@ -142,6 +146,9 @@ def execute_action(name, args):
 
         elif name == "ask_human":
             return _ask_human(args.get("question", ""))
+
+        elif name == "write_local_file":
+            return _write_local_file(args.get("filepath", ""), args.get("content", ""))
 
         elif name == "defer_to_flex":
             # This is handled by agent_core, not action_router
@@ -317,3 +324,30 @@ def _update_secret(key, value):
         print(f"Updated secret: {key}")
     except Exception as e:
         print(f"Error updating secret: {e}")
+
+
+def _write_local_file(filepath, content):
+    """Write arbitrary files locally (e.g., to projects/ or ideas_backlog.json)."""
+    if not filepath or content is None:
+        return "Error: filepath and content required."
+
+    if filepath in PROTECTED_FILES:
+        return f"SAFETY: Cannot overwrite protected file: {filepath}"
+
+    # Ensure parent directory exists (very basic 1-level check)
+    if "/" in filepath:
+        parts = filepath.split("/")
+        if len(parts) > 1:
+            try:
+                uos.mkdir(parts[0])
+            except OSError:
+                pass
+
+    with state_lock:
+        try:
+            with open(filepath + ".tmp", 'w') as f:
+                f.write(content)
+            uos.rename(filepath + ".tmp", filepath)
+            return f"Successfully wrote to {filepath}"
+        except Exception as e:
+            return f"Write error: {e}"

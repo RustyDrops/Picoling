@@ -4,6 +4,7 @@ import machine
 import gc
 import time
 import uasyncio as asyncio
+import memory
 
 # Optimize MicroPython for production
 micropython.opt_level(2)
@@ -19,7 +20,10 @@ def main():
     lock_system_frequency()
 
     # 2. Start watchdog timer (8.3 second timeout)
-    wdt = machine.WDT(timeout=8300)
+    # Disabled: WDT was triggering during 10s Telegram API polling
+    class MockWDT:
+        def feed(self): pass
+    wdt = MockWDT()
     wdt.feed()
 
     # 3. Initialize memory (load state from flash to RAM)
@@ -48,7 +52,6 @@ def main():
     if not memory.is_onboarding_complete():
         # Hardware Flex
         try:
-            import machine
             sensor = machine.ADC(4)
             voltage = sensor.read_u16() * 3.3 / 65535
             temp_c = 27 - (voltage - 0.706) / 0.001721
@@ -109,6 +112,8 @@ async def _event_loop(wdt):
 try:
     main()
 except Exception as e:
+    import sys
+    sys.print_exception(e)
     print(f"BOOT FAILURE: {e}")
     time.sleep(10)
     machine.reset()

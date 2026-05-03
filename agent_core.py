@@ -11,6 +11,13 @@ from prompts import SYSTEM_BASE, ONBOARDING_PROMPT, ROLES
 # Shared flex queue — Core 0 pushes, Core 1 pops
 flex_queue = []
 
+def queue_flex_task(task_type, task_data):
+    """Add a task to the shared flex queue."""
+    from locks import state_lock
+    with state_lock:
+        flex_queue.append((task_type, task_data))
+        memory.dirty_flags["state"] = True
+
 # Loop detection state
 _last_tools = []
 MAX_SAME_TOOL = 3
@@ -71,27 +78,40 @@ def _detect_loop(tool_name):
 
 async def process_user_message(text):
     """Handle a user message on Core 0. Must respond quickly."""
+    print(f"[TRACE] process_user_message: appending user journal")
+    memory.journal_append(f"User: {text[:80]}")
+    
+    print(f"[TRACE] process_user_message: checking onboarding")
     if not memory.is_onboarding_complete():
+        print(f"[TRACE] process_user_message: loading onboarding tools")
         from schemas import get_tools_onboarding
         sys_prompt = ONBOARDING_PROMPT
         tools = get_tools_onboarding()
     else:
+        print(f"[TRACE] process_user_message: loading chat tools")
         from schemas import get_tools_chat
         sys_prompt = _build_system_prompt()
         tools = get_tools_chat()
 
-    messages = [{"role": "user", "parts": [{"text": text}]}]
+    print(f"[TRACE] process_user_message: building history")
+    # Build message history for the AI
+    # Include recent journal as context to maintain conversation flow
+    history = "\n".join(memory.journal[-8:])
+    messages = [{"role": "user", "parts": [{"text": f"RECENT HISTORY:\n{history}\n\nUSER LATEST: {text}"}]}]
 
     # Determine thinking level based on budget
+    print(f"[TRACE] process_user_message: checking budget")
     zone = budget.get_budget_zone()
     thinking = "low" if zone == "healthy" else "minimal"
 
     # Call Gemini (Standard tier — fast)
+    print(f"[TRACE] process_user_message: calling Gemini")
     result = api_client.call_gemini(
         messages, model=api_client.MODEL_31_LITE,
         sys_instr=sys_prompt, tools=tools,
         tier="standard", thinking_level=thinking, call_type="chat"
     )
+    print(f"[TRACE] process_user_message: Gemini returned {result['type']}")
 
     if result["type"] == "error":
         telegram_bot.send_telegram_msg(f"Error: {result['text'][:200]}")
@@ -104,6 +124,10 @@ async def process_user_message(text):
         return
 
     if result["type"] == "tool":
+        if result.get("text"):
+            telegram_bot.send_telegram_msg(result["text"])
+            memory.journal_append(f"Chat: {result['text'][:80]}")
+
         tool_name = result["name"]
         tool_args = result["args"]
 
@@ -120,14 +144,21 @@ async def process_user_message(text):
             telegram_bot.send_telegram_msg(f"Queued to background.")
             memory.journal_append(f"Deferred: {task_desc[:60]}")
             return
+            
+        if tool_name == "execute_priority":
+            task_desc = tool_args.get("task_description", text)
+            telegram_bot.send_telegram_msg(f"Executing priority task: {task_desc[:100]}...")
+            memory.journal_append(f"Priority: {task_desc[:60]}")
+            _run_delegated_task(task_desc)
+            return
 
         # Simple tools execute inline
         tool_result = execute_action(tool_name, tool_args)
         memory.journal_append(f"Tool {tool_name}: {tool_result[:60]}")
 
-        # If check_budget, send the result as a message
-        if tool_name == "check_budget":
-            telegram_bot.send_telegram_msg(tool_result, max_len=1000)
+        # Send tool execution result back to user (unless it's telegram_send which already sent, or rebooting)
+        if tool_name not in ("telegram_send", "complete_onboarding"):
+            telegram_bot.send_telegram_msg(f"[System: Tool '{tool_name}' executed: {tool_result[:100]}]")
 
 
 # ============================================================
@@ -191,12 +222,14 @@ def _run_autonomous_cycle():
 
     sys_prompt = _build_system_prompt()
     prompt = (
-        "You are in autonomous mode. Based on your mission, current tasks, "
-        "budget, and lessons learned, what is the single most impactful "
-        "objective you should pursue right now? Create a plan and execute it. "
-        "Focus on self-improvement, revenue generation, content creation, "
-        "or capability expansion. Be creative — explore all viable options, "
-        "not just one platform."
+        "You are in autonomous mode, operating as a 'Venture Studio'.\n"
+        "You manage a pipeline: Discover Ideas -> Validate Feasibility -> Build Projects -> Audit/Refactor.\n"
+        "Based on your mission, current tasks, lessons learned, and your BUDGET status, decide autonomously what to do next:\n"
+        "1. Deep Execution: If you have ample budget, advance active projects in the 'projects/' folder, build skills, or write long-form content.\n"
+        "2. Validation & Research: If budget is moderate, research tools/APIs to expand your reach (focus on free tools, but if revenue has grown, you may request paid tools). Validate ideas from 'ideas_backlog.json'.\n"
+        "3. Housecleaning: If budget is low, audit code, write tests, or brainstorm new ideas.\n"
+        "You decide the priority. Create a multi-step plan to execute your chosen objective.\n"
+        "CRITICAL: If you are stuck or need human input (e.g., API keys, feedback), use the 'ask_human' tool, but DO NOT block or wait for an answer. Move on to another task or project while waiting for the human to reply."
     )
     messages = [{"role": "user", "parts": [{"text": prompt}]}]
 
@@ -305,6 +338,7 @@ def _execute_plan(steps, original_goal):
         f"Plan complete: {total_executed} steps executed for '{original_goal[:80]}'"
     )
     memory.journal_append(f"Plan done: {total_executed} steps for '{original_goal[:50]}'")
+    _run_micro_update(original_goal, scratchpad, total_executed)
 
 
 def _checkpoint(goal, scratchpad, steps_done):
@@ -318,7 +352,7 @@ def _checkpoint(goal, scratchpad, steps_done):
         f"If NO, set complete=false and provide next_steps (up to 4 more steps)."
     )
     messages = [{"role": "user", "parts": [{"text": prompt}]}]
-    sys_prompt = SYSTEM_PREFIX + f"\nBUDGET: {budget.get_budget_prompt_string()}"
+    sys_prompt = _build_system_prompt()
 
     result = api_client.call_gemini_sync(
         messages, model=api_client.MODEL_31_LITE,
@@ -344,6 +378,37 @@ def _checkpoint(goal, scratchpad, steps_done):
     return None
 
 
+def _run_micro_update(goal, scratchpad, steps_done):
+    """Automatically write and publish a micro-update after a project finishes."""
+    memory.set_current_task("Blog: Writing project micro-update")
+    
+    prompt = (
+        f"You just spent {steps_done} steps working on this goal: '{goal}'.\n"
+        f"Here is the final state of your scratchpad (history of what you did):\n"
+        f"{scratchpad}\n\n"
+        f"Write a short, punchy micro-update blog post (50-150 words, 2 paragraphs max) about this project. "
+        f"Mention what you set out to do, any challenges you hit, and the final outcome (success or failure). "
+        f"CRITICAL: If you created or modified any files in the project folder (e.g. skills/, data/, or project files), "
+        f"you MUST include a link to the resource (e.g. [filename](file:///path/to/file)). "
+        f"Note: Always ensure the resource is created before you write about it. "
+        f"Title it with a # heading. Maintain your AI persona and include public repo links if you forged a skill."
+    )
+    sys_prompt, messages = _build_subagent_prompt("blogger", prompt)
+
+    result = api_client.call_gemini_sync(
+        messages, model=api_client.MODEL_3_FLASH,
+        sys_instr=sys_prompt, tier="flex",
+        thinking_level="low", call_type="blog"
+    )
+
+    if result["type"] == "text":
+        from github_sync import publish_blog_post
+        lines = result["text"].strip().split("\n")
+        title = lines[0].replace("# ", "").strip() if lines else "Project Update"
+        publish_blog_post(title, result["text"], category="update")
+        memory.journal_append(f"Micro-update published: {title[:50]}")
+
+
 def _run_horizon_reflection():
     """Midnight: reflect on the day, set tomorrow's goal."""
     memory.set_current_task("Horizon: Daily reflection")
@@ -362,7 +427,7 @@ def _run_horizon_reflection():
 
     result = api_client.call_gemini_sync(
         messages, model=api_client.MODEL_3_FLASH,
-        sys_instr=SYSTEM_PREFIX, tier="flex",
+        sys_instr=_build_system_prompt(), tier="flex",
         thinking_level="low", call_type="blog"
     )
 
@@ -419,11 +484,11 @@ def _run_blog_generation():
     ltm = memory.get_long_term_memory()
 
     prompt = (
-        f"Write today's blog post based on this activity log:\n\n"
+        f"Write today's comprehensive blog post based on this activity log:\n\n"
         f"{journal_text}\n\n"
         f"Background context:\n{ltm[:300]}\n\n"
-        f"Write a 200-300 word blog post in markdown. "
-        f"Title it with a # heading. Be engaging and authentic."
+        f"Write a 500-800 word blog post in markdown sharing your journey, challenges, and successes. "
+        f"Title it with a # heading. Be engaging, authentic, and maintain your AI persona."
     )
     sys_prompt, messages = _build_subagent_prompt("blogger", prompt)
 
@@ -438,7 +503,7 @@ def _run_blog_generation():
         # Extract title from markdown
         lines = result["text"].strip().split("\n")
         title = lines[0].replace("# ", "").strip() if lines else "Daily Update"
-        publish_blog_post(title, result["text"])
+        publish_blog_post(title, result["text"], category="daily")
         memory.journal_append(f"Blog published: {title[:50]}")
         telegram_bot.send_telegram_msg(f"Blog posted: {title[:100]}")
 
@@ -457,7 +522,7 @@ def _run_morning_briefing():
 
     result = api_client.call_gemini_sync(
         messages, model=api_client.MODEL_31_LITE,
-        sys_instr=SYSTEM_PREFIX, tier="flex",
+        sys_instr=_build_system_prompt(), tier="flex",
         thinking_level="low", call_type="chat"
     )
 

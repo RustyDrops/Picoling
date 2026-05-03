@@ -80,25 +80,25 @@ def _handle_reboot():
 def _handle_help():
     return (
         "Commands:\n"
-        "~ping — Health check\n"
-        "~budget — Spend breakdown\n"
-        "~auto on|off — Autonomous mode\n"
-        "~save — Flush RAM to flash\n"
-        "~cnew — Clear journal\n"
-        "~status — Current state\n"
-        "~ghost on|off — Toggle Ghost Mode\n"
-        "~reboot — Soft reset\n"
-        "~help — This list"
+        ".ping - Health check\n"
+        ".budget - Spend breakdown\n"
+        ".auto on|off - Autonomous mode\n"
+        ".save - Flush RAM to flash\n"
+        ".cnew - Clear journal\n"
+        ".status - Current state\n"
+        ".ghost on|off - Toggle Ghost Mode\n"
+        ".reboot - Soft reset\n"
+        ".help - This list"
     )
 
 
 COMMANDS = {
-    "~ping": lambda _: _handle_ping(),
-    "~budget": lambda _: _handle_budget(),
-    "~save": lambda _: _handle_save(),
-    "~cnew": lambda _: _handle_cnew(),
-    "~status": lambda _: _handle_status(),
-    "~help": lambda _: _handle_help(),
+    ".ping": lambda _: _handle_ping(),
+    ".budget": lambda _: _handle_budget(),
+    ".save": lambda _: _handle_save(),
+    ".cnew": lambda _: _handle_cnew(),
+    ".status": lambda _: _handle_status(),
+    ".help": lambda _: _handle_help(),
 }
 
 
@@ -143,23 +143,23 @@ async def poll_loop(wdt):
                     _handle_ticket_response(text)
                     continue
 
-                # Handle ~ commands
-                if text.startswith("~"):
+                # Handle . commands
+                if text.startswith("."):
                     parts = text.split(" ", 1)
                     cmd = parts[0].lower()
                     args = parts[1] if len(parts) > 1 else ""
 
-                    if cmd == "~auto":
+                    if cmd == ".auto":
                         response = _handle_auto(args)
-                    elif cmd == "~ghost":
+                    elif cmd == ".ghost":
                         response = _handle_ghost(args)
-                    elif cmd == "~reboot":
+                    elif cmd == ".reboot":
                         _handle_reboot()
                         return  # Won't reach
                     elif cmd in COMMANDS:
                         response = COMMANDS[cmd](args)
                     else:
-                        response = f"Unknown command: {cmd}. Try ~help"
+                        response = f"Unknown command: {cmd}. Try .help"
 
                     telegram_bot.send_telegram_msg(response, max_len=1000)
                     continue

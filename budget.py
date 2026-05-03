@@ -160,9 +160,9 @@ def get_detailed_status():
     total_avail = round(DAILY_BUDGET + stats.get("carryover", 0), 4)
     lines = [
         f"Date: {stats.get('date')}",
-        f"Budget: ${remaining:.4f} / ${total_avail}",
-        f"Spent: ${stats.get('total_spent', 0):.6f}",
-        f"Carryover: ${stats.get('carryover', 0):.4f}",
+        f"Budget: ${remaining:.7f} / ${total_avail:.7f}",
+        f"Spent: ${stats.get('total_spent', 0):.7f}",
+        f"Carryover: ${stats.get('carryover', 0):.7f}",
         f"Calls: {stats.get('calls_made', 0)}",
         f"Grounding: {stats.get('grounding_calls', 0)}/{GROUNDING_DAILY_LIMIT}",
         f"Zone: {get_budget_zone().upper()}",
@@ -170,6 +170,6 @@ def get_detailed_status():
     by_model = stats.get("by_model", {})
     for m, s in by_model.items():
         short = m.split("-")[-1] if "-" in m else m
-        lines.append(f"  {short}: ${s.get('cost', 0):.6f} ({s.get('calls', 0)} calls)")
+        lines.append(f"  {short}: ${s.get('cost', 0):.7f} ({s.get('calls', 0)} calls)")
     gc.collect()
     return "\n".join(lines)

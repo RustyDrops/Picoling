@@ -44,6 +44,11 @@ def get_tools_chat():
              "question": {"type": "STRING", "description": "The question to ask."}
          }, "required": ["question"]}},
 
+        {"name": "execute_priority", "description": "Execute a task IMMEDIATELY on the current core without delegating to background. Use this for urgent tasks, direct user requests that need immediate output, or critical system operations. WARNING: This will block the chat interface until complete.",
+         "parameters": {"type": "OBJECT", "properties": {
+             "task_description": {"type": "STRING", "description": "Detailed description of the task to execute immediately."}
+         }, "required": ["task_description"]}},
+ 
         {"name": "check_budget", "description": "Get current budget breakdown.",
          "parameters": {"type": "OBJECT", "properties": {}}},
     ]}]
@@ -55,7 +60,7 @@ def get_tools_full():
         {"name": "create_plan", "description": "Generate a multi-step execution plan. Steps run sequentially. After each batch of 4 steps, you will be asked if the objective is complete or if more steps are needed.",
          "parameters": {"type": "OBJECT", "properties": {
              "steps": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {
-                 "agent": {"type": "STRING", "enum": ["researcher", "coder", "auditor", "blogger", "strategist"],
+                 "agent": {"type": "STRING", "enum": ["researcher", "coder", "auditor", "strategist"],
                            "description": "Subagent role for this step."},
                  "task": {"type": "STRING", "description": "Specific instruction for this step."},
                  "thinking": {"type": "STRING", "enum": ["minimal", "low", "medium", "high"],
@@ -107,10 +112,11 @@ def get_tools_full():
              "headers": {"type": "STRING", "description": "JSON string of headers dict."}
          }, "required": ["url", "method"]}},
 
-        {"name": "publish_blog", "description": "Publish a markdown blog post to the public portfolio repo (GitHub Pages).",
+        {"name": "publish_blog", "description": "Publish a markdown blog post to the public portfolio repo (GitHub Pages). For micro-updates, provide a short description of WHAT you did and WHY you did it, maintaining your unique AI persona/tone. If you forged a new skill or project, include the public repo link. CRITICAL: For micro-updates, if you created or modified any files in the project folder, you MUST include a link to the resource (e.g. [filename](file:///path/to/file)) and ensure the resource is created before publishing.",
          "parameters": {"type": "OBJECT", "properties": {
              "title": {"type": "STRING", "description": "Blog post title."},
-             "content": {"type": "STRING", "description": "Full markdown content of the blog post."}
+             "content": {"type": "STRING", "description": "Full markdown content of the blog post."},
+             "category": {"type": "STRING", "enum": ["update", "daily"], "description": "Category of the post. Use 'update' for micro-updates during chains."}
          }, "required": ["title", "content"]}},
 
         {"name": "publish_skill", "description": "Publish a skill from the local skills/ directory to the public portfolio repo for others to see and use.",
@@ -140,6 +146,12 @@ def get_tools_full():
          "parameters": {"type": "OBJECT", "properties": {
              "question": {"type": "STRING"}
          }, "required": ["question"]}},
+
+        {"name": "write_local_file", "description": "Write or update a file locally on the device (e.g. ideas_backlog.json or projects/file.py). Note this does not push to GitHub.",
+         "parameters": {"type": "OBJECT", "properties": {
+             "filepath": {"type": "STRING", "description": "Relative path to file (e.g. 'ideas_backlog.json')."},
+             "content": {"type": "STRING", "description": "Full file content to write."}
+         }, "required": ["filepath", "content"]}},
     ]}]
 
 

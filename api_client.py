@@ -123,30 +123,37 @@ def call_gemini(messages, model=MODEL_31_LITE, sys_instr=None,
 
         # Parse response — find first actionable part
         candidates = data.get("candidates", [{}])
-        parts = candidates[0].get("content", {}).get("parts", [])
+        cand = candidates[0] if candidates else {}
+        parts = cand.get("content", {}).get("parts", [])
+        
+        if not parts:
+            reason = cand.get("finishReason", "Unknown")
+            return {"type": "error", "text": f"Empty response from API (Reason: {reason})", "usage": {}}
+
+        text_content = ""
+        for part in parts:
+            if "text" in part:
+                text_content += part["text"] + "\n"
 
         for part in parts:
-            # Skip thought parts (thoughtSignature)
-            if part.get("thought"):
-                continue
             if "functionCall" in part:
                 fc = part["functionCall"]
                 return {
                     "type": "tool",
+                    "text": text_content.strip(),
                     "name": fc["name"],
                     "args": fc.get("args", {}),
                     "usage": {"in": t_in, "out": t_out, "think": t_think},
                 }
-            if "text" in part:
-                return {
-                    "type": "text",
-                    "text": part["text"],
-                    "usage": {"in": t_in, "out": t_out, "think": t_think},
-                }
 
-        return {"type": "text", "text": "", "usage": {"in": t_in, "out": t_out, "think": t_think}}
+        return {
+            "type": "text", 
+            "text": text_content.strip(), 
+            "usage": {"in": t_in, "out": t_out, "think": t_think}
+        }
 
     except Exception as e:
+        print(f"[API] Internal error: {e}")
         # Invalidate DNS cache on connection errors
         from wifi_mgmt import invalidate_dns_cache
         invalidate_dns_cache()
@@ -158,13 +165,14 @@ def call_gemini(messages, model=MODEL_31_LITE, sys_instr=None,
 
 
 def call_gemini_sync(messages, model=MODEL_31_LITE, sys_instr=None,
-                     tools=None, tier="flex", thinking_level=None,
-                     call_type="chat"):
+                     tools=None, grounding=False, tier="flex", thinking_level=None,
+                     call_type="chat", response_schema=None):
     """Synchronous version for Core 1 (background thread).
     Core 1 cannot use uasyncio, so this is a blocking call."""
     return call_gemini(messages, model=model, sys_instr=sys_instr,
-                       tools=tools, tier=tier, thinking_level=thinking_level,
-                       call_type=call_type)
+                       tools=tools, grounding=grounding, tier=tier, 
+                       thinking_level=thinking_level, call_type=call_type,
+                       response_schema=response_schema)
 
 
 def call_with_fallback(messages, model=MODEL_31_LITE, sys_instr=None,
