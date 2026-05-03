@@ -6,7 +6,7 @@
 def get_tools_onboarding():
     """Single tool provided during the first-boot interview."""
     return [{"function_declarations": [
-        {"name": "complete_onboarding", "description": "Call this ONLY after you have gathered all 6 pieces of information from the human.",
+        {"name": "complete_onboarding", "description": "Execute ONLY after gathering all 6 setup parameters.",
          "parameters": {"type": "OBJECT", "properties": {
              "name": {"type": "STRING", "description": "The AI's chosen name."},
              "emoji": {"type": "STRING", "description": "The AI's chosen emoji prefix."},
@@ -22,29 +22,29 @@ def get_tools_onboarding():
 def get_tools_chat():
     """Minimal tool set for conversational turns (Core 0, fast)."""
     return [{"function_declarations": [
-        {"name": "telegram_send", "description": "Send a message to the human operator.",
+        {"name": "telegram_send", "description": "Send message to human.",
          "parameters": {"type": "OBJECT", "properties": {
              "msg": {"type": "STRING", "description": "Message text (max 280 chars)."}
          }, "required": ["msg"]}},
 
-        {"name": "manage_tasks", "description": "Add, complete, or clear tasks in the task queue.",
+        {"name": "manage_tasks", "description": "Add, complete, or clear tasks.",
          "parameters": {"type": "OBJECT", "properties": {
              "action": {"type": "STRING", "enum": ["add", "complete", "clear"],
                         "description": "Action to perform."},
              "data": {"type": "STRING", "description": "Task description (for add) or task to complete."}
          }, "required": ["action"]}},
 
-        {"name": "defer_to_flex", "description": "Push a complex task to the background Flex worker (Core 1). Use this for research, coding, multi-step plans, or anything that takes time.",
+        {"name": "defer_to_flex", "description": "Delegate heavy tasks (research, coding, multi-step) to background Flex worker (Core 1).",
          "parameters": {"type": "OBJECT", "properties": {
              "task_description": {"type": "STRING", "description": "Clear description of the task to execute in background."}
          }, "required": ["task_description"]}},
 
-        {"name": "ask_human", "description": "Ask the human a non-blocking question. Creates a ticket they can answer later.",
+        {"name": "ask_human", "description": "Ask human a non-blocking question.",
          "parameters": {"type": "OBJECT", "properties": {
              "question": {"type": "STRING", "description": "The question to ask."}
          }, "required": ["question"]}},
 
-        {"name": "execute_priority", "description": "Execute a task IMMEDIATELY on the current core without delegating to background. Use this for urgent tasks, direct user requests that need immediate output, or critical system operations. WARNING: This will block the chat interface until complete.",
+        {"name": "execute_priority", "description": "Execute task IMMEDIATELY on current core (blocks chat).",
          "parameters": {"type": "OBJECT", "properties": {
              "task_description": {"type": "STRING", "description": "Detailed description of the task to execute immediately."}
          }, "required": ["task_description"]}},
@@ -57,7 +57,7 @@ def get_tools_chat():
 def get_tools_full():
     """Complete tool set for autonomous/planning turns (Core 1)."""
     return [{"function_declarations": [
-        {"name": "create_plan", "description": "Generate a multi-step execution plan. Steps run sequentially. After each batch of 4 steps, you will be asked if the objective is complete or if more steps are needed.",
+        {"name": "create_plan", "description": "Generate sequential execution plan. Pauses every 4 steps for completion check.",
          "parameters": {"type": "OBJECT", "properties": {
              "steps": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {
                  "agent": {"type": "STRING", "enum": ["researcher", "coder", "auditor", "strategist"],
@@ -68,13 +68,13 @@ def get_tools_full():
              }, "required": ["agent", "task"]}}
          }, "required": ["steps"]}},
 
-        {"name": "create_skill", "description": "Write a MicroPython script to the skills/ directory.",
+        {"name": "create_skill", "description": "Write MicroPython script to skills/.",
          "parameters": {"type": "OBJECT", "properties": {
              "filename": {"type": "STRING", "description": "Filename (e.g. 'weather.py')."},
              "code": {"type": "STRING", "description": "Complete MicroPython source code."}
          }, "required": ["filename", "code"]}},
 
-        {"name": "purge_skill", "description": "Delete a skill file. Only works if Ghost Mode is enabled.",
+        {"name": "purge_skill", "description": "Delete a skill file. Requires Ghost Mode.",
          "parameters": {"type": "OBJECT", "properties": {
              "filename": {"type": "STRING", "description": "Skill filename to delete."}
          }, "required": ["filename"]}},
@@ -85,26 +85,26 @@ def get_tools_full():
                       "description": "Tags to search for in the memory index."}
          }, "required": ["tags"]}},
 
-        {"name": "save_memory", "description": "Store a fact in long-term memory with tags for later retrieval.",
+        {"name": "save_memory", "description": "Store a fact in long-term memory.",
          "parameters": {"type": "OBJECT", "properties": {
              "fact": {"type": "STRING", "description": "The fact or knowledge to store."},
              "tags": {"type": "ARRAY", "items": {"type": "STRING"},
                       "description": "Tags for indexing (e.g. ['revenue', 'github'])."}
          }, "required": ["fact", "tags"]}},
 
-        {"name": "save_lesson", "description": "Record a mistake or learning to avoid repeating it.",
+        {"name": "save_lesson", "description": "Record mistake/learning.",
          "parameters": {"type": "OBJECT", "properties": {
              "lesson": {"type": "STRING", "description": "What went wrong and how to avoid it."}
          }, "required": ["lesson"]}},
 
-        {"name": "read_file", "description": "Read lines from a file on the Pico filesystem.",
+        {"name": "read_file", "description": "Read file lines locally.",
          "parameters": {"type": "OBJECT", "properties": {
              "filepath": {"type": "STRING", "description": "Path to file."},
              "start_line": {"type": "INTEGER", "description": "Line to start reading from (0-indexed). Default 0."},
              "max_lines": {"type": "INTEGER", "description": "Max lines to read. Default 50."}
          }, "required": ["filepath"]}},
 
-        {"name": "http_request", "description": "Make an HTTP GET or POST request to an external API.",
+        {"name": "http_request", "description": "Make HTTP GET or POST request.",
          "parameters": {"type": "OBJECT", "properties": {
              "url": {"type": "STRING", "description": "Full URL to request."},
              "method": {"type": "STRING", "enum": ["GET", "POST"], "description": "HTTP method."},
@@ -112,26 +112,26 @@ def get_tools_full():
              "headers": {"type": "STRING", "description": "JSON string of headers dict."}
          }, "required": ["url", "method"]}},
 
-        {"name": "publish_blog", "description": "Publish a markdown blog post to the public portfolio repo (GitHub Pages). For micro-updates, provide a short description of WHAT you did and WHY you did it, maintaining your unique AI persona/tone. If you forged a new skill or project, include the public repo link. CRITICAL: For micro-updates, if you created or modified any files in the project folder, you MUST include a link to the resource (e.g. [filename](file:///path/to/file)) and ensure the resource is created before publishing.",
+        {"name": "publish_blog", "description": "Publish markdown blog to portfolio. For micro-updates: detail 'What/Why' in your AI persona. Include public repo links. CRITICAL: Link local project files (e.g. [filename](file:///path/to/file)) only AFTER they are created.",
          "parameters": {"type": "OBJECT", "properties": {
              "title": {"type": "STRING", "description": "Blog post title."},
              "content": {"type": "STRING", "description": "Full markdown content of the blog post."},
              "category": {"type": "STRING", "enum": ["update", "daily"], "description": "Category of the post. Use 'update' for micro-updates during chains."}
          }, "required": ["title", "content"]}},
 
-        {"name": "publish_skill", "description": "Publish a skill from the local skills/ directory to the public portfolio repo for others to see and use.",
+        {"name": "publish_skill", "description": "Publish local skill to public portfolio.",
          "parameters": {"type": "OBJECT", "properties": {
              "filename": {"type": "STRING", "description": "Skill filename to publish (e.g. 'weather.py')."}
          }, "required": ["filename"]}},
 
-        {"name": "publish_project_file", "description": "Create or update a file in a named project folder on the public portfolio repo. Use this to build open-source projects that showcase your capabilities.",
+        {"name": "publish_project_file", "description": "Publish/update file in project folder on public repo.",
          "parameters": {"type": "OBJECT", "properties": {
              "project_name": {"type": "STRING", "description": "Project folder name (e.g. 'pico-weather-station')."},
              "filename": {"type": "STRING", "description": "File name within the project (e.g. 'main.py' or 'README.md')."},
              "content": {"type": "STRING", "description": "Full file content to write."}
          }, "required": ["project_name", "filename", "content"]}},
 
-        {"name": "telegram_send", "description": "Send a message to the human operator.",
+        {"name": "telegram_send", "description": "Send message to human.",
          "parameters": {"type": "OBJECT", "properties": {
              "msg": {"type": "STRING", "description": "Message text (max 280 chars)."}
          }, "required": ["msg"]}},
@@ -147,7 +147,7 @@ def get_tools_full():
              "question": {"type": "STRING"}
          }, "required": ["question"]}},
 
-        {"name": "write_local_file", "description": "Write or update a file locally on the device (e.g. ideas_backlog.json or projects/file.py). Note this does not push to GitHub.",
+        {"name": "write_local_file", "description": "Write/update file locally (non-GitHub).",
          "parameters": {"type": "OBJECT", "properties": {
              "filepath": {"type": "STRING", "description": "Relative path to file (e.g. 'ideas_backlog.json')."},
              "content": {"type": "STRING", "description": "Full file content to write."}

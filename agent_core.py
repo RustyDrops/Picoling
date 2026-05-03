@@ -222,14 +222,12 @@ def _run_autonomous_cycle():
 
     sys_prompt = _build_system_prompt()
     prompt = (
-        "You are in autonomous mode, operating as a 'Venture Studio'.\n"
-        "You manage a pipeline: Discover Ideas -> Validate Feasibility -> Build Projects -> Audit/Refactor.\n"
-        "Based on your mission, current tasks, lessons learned, and your BUDGET status, decide autonomously what to do next:\n"
-        "1. Deep Execution: If you have ample budget, advance active projects in the 'projects/' folder, build skills, or write long-form content.\n"
-        "2. Validation & Research: If budget is moderate, research tools/APIs to expand your reach (focus on free tools, but if revenue has grown, you may request paid tools). Validate ideas from 'ideas_backlog.json'.\n"
-        "3. Housecleaning: If budget is low, audit code, write tests, or brainstorm new ideas.\n"
-        "You decide the priority. Create a multi-step plan to execute your chosen objective.\n"
-        "CRITICAL: If you are stuck or need human input (e.g., API keys, feedback), use the 'ask_human' tool, but DO NOT block or wait for an answer. Move on to another task or project while waiting for the human to reply."
+        "MODE: Autonomous Venture Studio. PIPELINE: Discover -> Validate -> Build -> Audit. "
+        "Decide next action based on BUDGET, mission, and lessons:\n"
+        "1. High Budget: Deep execution (advance projects/, build skills, write content).\n"
+        "2. Mod Budget: Validate ideas_backlog.json, research free tools.\n"
+        "3. Low Budget: Audit code, write tests, brainstorm.\n"
+        "Create multi-step execution plan. CRITICAL: If blocked, use ask_human tool and immediately switch tasks. Do not wait."
     )
     messages = [{"role": "user", "parts": [{"text": prompt}]}]
 
@@ -274,6 +272,7 @@ def _execute_plan(steps, original_goal):
             role_prompt, messages = _build_subagent_prompt(agent, task, scratchpad)
 
             # Select model and call type based on agent role
+            from schemas import get_tools_full
             model = api_client.MODEL_31_LITE
             call_type = "chat"
             grounding = False
@@ -294,6 +293,7 @@ def _execute_plan(steps, original_goal):
 
             result = api_client.call_gemini_sync(
                 messages, model=model, sys_instr=role_prompt,
+                tools=get_tools_full(),
                 tier="flex", thinking_level=thinking,
                 call_type=call_type, grounding=grounding
             )
@@ -346,10 +346,8 @@ def _checkpoint(goal, scratchpad, steps_done):
     from schemas import get_checkpoint_response_schema
 
     prompt = (
-        f"You completed {steps_done} steps toward: '{goal}'.\n"
-        f"Current scratchpad:\n{scratchpad}\n\n"
-        f"Is the objective fully complete? If YES, set complete=true and provide a summary. "
-        f"If NO, set complete=false and provide next_steps (up to 4 more steps)."
+        f"Steps complete: {steps_done}. Goal: '{goal}'. Scratchpad:\n{scratchpad}\n"
+        f"Objective finished? YES -> complete=true, summarize. NO -> complete=false, generate next_steps (max 4)."
     )
     messages = [{"role": "user", "parts": [{"text": prompt}]}]
     sys_prompt = _build_system_prompt()
@@ -383,15 +381,10 @@ def _run_micro_update(goal, scratchpad, steps_done):
     memory.set_current_task("Blog: Writing project micro-update")
     
     prompt = (
-        f"You just spent {steps_done} steps working on this goal: '{goal}'.\n"
-        f"Here is the final state of your scratchpad (history of what you did):\n"
-        f"{scratchpad}\n\n"
-        f"Write a short, punchy micro-update blog post (50-150 words, 2 paragraphs max) about this project. "
-        f"Mention what you set out to do, any challenges you hit, and the final outcome (success or failure). "
-        f"CRITICAL: If you created or modified any files in the project folder (e.g. skills/, data/, or project files), "
-        f"you MUST include a link to the resource (e.g. [filename](file:///path/to/file)). "
-        f"Note: Always ensure the resource is created before you write about it. "
-        f"Title it with a # heading. Maintain your AI persona and include public repo links if you forged a skill."
+        f"Steps complete: {steps_done}. Goal: '{goal}'. Final scratchpad:\n{scratchpad}\n"
+        f"Write micro-update blog (50-150 words, max 2 paragraphs). Include goal, challenges, outcome. "
+        f"CRITICAL: Link created/modified files (e.g. [filename](file:///path/to/file)). Ensure file exists first. "
+        f"Use # heading and maintain AI persona."
     )
     sys_prompt, messages = _build_subagent_prompt("blogger", prompt)
 
@@ -417,11 +410,8 @@ def _run_horizon_reflection():
     journal_text = "\n".join(journal_full) if journal_full else "No activity recorded."
 
     prompt = (
-        f"END OF DAY REFLECTION.\n"
-        f"Today's activity:\n{journal_text}\n\n"
-        f"Long-term memory:\n{ltm[:500]}\n\n"
-        f"Reflect on today. What worked? What didn't? "
-        f"Set a clear, actionable goal for tomorrow. Be concise."
+        f"EOD REFLECTION.\nActivity:\n{journal_text}\nMemory:\n{ltm[:500]}\n"
+        f"Reflect on successes/failures. Set one actionable goal for tomorrow. Be concise."
     )
     messages = [{"role": "user", "parts": [{"text": prompt}]}]
 
@@ -450,16 +440,14 @@ def _summarize_journal():
     journal_text = "\n".join(journal_full)
 
     prompt = (
-        f"Compress into a dense fact sheet (max 300 words):\n\n"
-        f"PREVIOUS MEMORY:\n{old_ltm[:500]}\n\n"
-        f"NEW ACTIVITY:\n{journal_text}\n\n"
-        f"Keep key facts, decisions, lessons, and revenue progress. Drop trivia."
+        f"Compress to fact sheet (max 300 words):\nOLD:\n{old_ltm[:500]}\nNEW:\n{journal_text}\n"
+        f"Keep facts, decisions, revenue. Drop trivia."
     )
     messages = [{"role": "user", "parts": [{"text": prompt}]}]
 
     result = api_client.call_gemini_sync(
         messages, model=api_client.MODEL_31_LITE,
-        sys_instr="You are a memory compression engine. Output ONLY the compressed fact sheet.",
+        sys_instr="Output ONLY compressed fact sheet.",
         tier="flex", thinking_level="minimal", call_type="summarize"
     )
 
@@ -484,11 +472,9 @@ def _run_blog_generation():
     ltm = memory.get_long_term_memory()
 
     prompt = (
-        f"Write today's comprehensive blog post based on this activity log:\n\n"
-        f"{journal_text}\n\n"
-        f"Background context:\n{ltm[:300]}\n\n"
-        f"Write a 500-800 word blog post in markdown sharing your journey, challenges, and successes. "
-        f"Title it with a # heading. Be engaging, authentic, and maintain your AI persona."
+        f"Write a comprehensive 500-800 word markdown blog post based on today's activity:\n{journal_text}\n"
+        f"Context:\n{ltm[:300]}\n"
+        f"Share your journey, challenges, and successes. Title with # heading. Maintain engaging, authentic AI persona."
     )
     sys_prompt, messages = _build_subagent_prompt("blogger", prompt)
 
@@ -513,10 +499,8 @@ def _run_morning_briefing():
     memory.set_current_task("Morning: Daily briefing")
 
     prompt = (
-        f"Good morning. Budget: {budget.get_budget_prompt_string()}. "
-        f"Goal: {memory.get_daily_goal()}. "
-        f"Tasks: {', '.join(memory.get_active_tasks()[:3]) or 'None'}. "
-        f"Plan your day. What will you focus on? Be concise."
+        f"Budget: {budget.get_budget_prompt_string()}. Goal: {memory.get_daily_goal()}. "
+        f"Tasks: {', '.join(memory.get_active_tasks()[:3]) or 'None'}. Provide concise daily focus plan."
     )
     messages = [{"role": "user", "parts": [{"text": prompt}]}]
 

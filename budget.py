@@ -143,12 +143,12 @@ def get_budget_prompt_string():
     zone = get_budget_zone()
 
     if zone == "critical":
-        return f"BUDGET CRITICAL: ${remaining:.4f} of ${total_avail} left. Chat only. No background work."
+        return f"BUDGET CRITICAL: ${remaining:.4f}/${total_avail}. Chat only. No background work."
     elif zone == "emergency":
-        return f"Budget LOW: ${remaining:.4f} of ${total_avail} left. Flex only, minimal thinking."
+        return f"Budget LOW: ${remaining:.4f}/${total_avail}. Flex only, minimal thinking."
     elif zone == "cautious":
-        return f"Budget moderate: ${remaining:.4f} of ${total_avail} left ({calls} calls). Be efficient."
-    return f"Budget healthy: ${remaining:.4f} of ${total_avail} left ({calls} calls). Operate normally."
+        return f"Budget moderate: ${remaining:.4f}/${total_avail} ({calls} calls). Be efficient."
+    return f"Budget healthy: ${remaining:.4f}/${total_avail} ({calls} calls). Operate normally."
 
 
 def get_detailed_status():

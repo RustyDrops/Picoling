@@ -126,8 +126,15 @@ def call_gemini(messages, model=MODEL_31_LITE, sys_instr=None,
         cand = candidates[0] if candidates else {}
         parts = cand.get("content", {}).get("parts", [])
         
+        reason = cand.get("finishReason", "Unknown")
+
         if not parts:
-            reason = cand.get("finishReason", "Unknown")
+            if reason == "MALFORMED_FUNCTION_CALL":
+                msg = cand.get("finishMessage", "")
+                fuzzy = _attempt_fuzzy_parse(msg)
+                if fuzzy:
+                    fuzzy["usage"] = {"in": t_in, "out": t_out, "think": t_think}
+                    return fuzzy
             return {"type": "error", "text": f"Empty response from API (Reason: {reason})", "usage": {}}
 
         text_content = ""
@@ -145,6 +152,13 @@ def call_gemini(messages, model=MODEL_31_LITE, sys_instr=None,
                     "args": fc.get("args", {}),
                     "usage": {"in": t_in, "out": t_out, "think": t_think},
                 }
+        
+        # If no functionCall part, but text exists, check for "hallucinated" tool calls in text
+        if text_content:
+            fuzzy = _attempt_fuzzy_parse(text_content)
+            if fuzzy:
+                fuzzy["usage"] = {"in": t_in, "out": t_out, "think": t_think}
+                return fuzzy
 
         return {
             "type": "text", 
@@ -162,6 +176,51 @@ def call_gemini(messages, model=MODEL_31_LITE, sys_instr=None,
         if res:
             res.close()
         gc.collect()
+
+
+def _attempt_fuzzy_parse(text):
+    """Try to extract a tool call from malformed or plain text output.
+    Supports: 
+    1. call:name{args} 
+    2. name(args)
+    3. ```json { "name": "...", "args": ... } ```
+    """
+    if not text:
+        return None
+    
+    # 1. Look for call:name{args} or name{args}
+    try:
+        # Find start of arguments '{'
+        brace_idx = text.find("{")
+        if brace_idx != -1:
+            # Extract name: look backwards from '{'
+            name_part = text[:brace_idx].strip()
+            # Handle "call:name", "name", or "Malformed function call: name"
+            if ":" in name_part:
+                name = name_part.split(":")[-1].strip()
+            else:
+                name = name_part.split(" ")[-1].strip()
+            
+            # Extract args: everything from '{' to the last '}'
+            last_brace = text.rfind("}")
+            if last_brace != -1:
+                args_str = text[brace_idx:last_brace+1]
+                # Very basic cleanup for common JSON malformations
+                # Add quotes to keys if missing? Hard to do reliably without regex.
+                # For now, let's try to load it as JSON.
+                try:
+                    import ujson
+                    # Simple fix for missing quotes on keys: {name: "val"} -> {"name": "val"}
+                    # This is just a placeholder; ujson.loads will fail on non-strict JSON.
+                    args = ujson.loads(args_str)
+                    return {"type": "tool", "name": name, "args": args, "text": "Recovered from malformed call."}
+                except:
+                    # If ujson fails, we might still be stuck, but at least we tried.
+                    pass
+    except:
+        pass
+    
+    return None
 
 
 def call_gemini_sync(messages, model=MODEL_31_LITE, sys_instr=None,

@@ -34,6 +34,10 @@ ALLOWED_DOMAINS = (
 def execute_action(name, args):
     """Execute a tool call and return the result string."""
     print(f"[TOOL] {name}")
+    # Normalize common argument aliases (handles model hallucinations)
+    filename = args.get("filename") or args.get("file_name") or args.get("name") or args.get("filepath")
+    content = args.get("content") or args.get("code") or args.get("body") or args.get("data")
+    
     try:
         if name == "complete_onboarding":
             import machine
@@ -74,24 +78,23 @@ def execute_action(name, args):
             return "Rebooting..."
 
         elif name == "telegram_send":
-            msg = args.get("message", "")
+            msg = args.get("message") or args.get("msg") or ""
             telegram_bot.send_telegram_msg(msg)
             return "Message sent."
 
         elif name == "manage_tasks":
             action = args.get("action", "add")
-            data = args.get("data", "")
-            return memory.manage_tasks(action, data)
+            return memory.manage_tasks(action, content or "")
 
         elif name == "check_budget":
             import budget
             return budget.get_detailed_status()
 
         elif name == "create_skill":
-            return _create_skill(args.get("filename", ""), args.get("code", ""))
+            return _create_skill(filename, content)
 
         elif name == "purge_skill":
-            return _purge_skill(args.get("filename", ""))
+            return _purge_skill(filename)
 
         elif name == "search_memory":
             tags = args.get("tags", [])
@@ -101,17 +104,17 @@ def execute_action(name, args):
             return "No matching memories found."
 
         elif name == "save_memory":
-            fact = args.get("fact", "")
+            fact = args.get("fact") or content or ""
             tags = args.get("tags", [])
             return memory.save_memory_fact(fact, tags)
 
         elif name == "save_lesson":
-            lesson = args.get("lesson", "")
+            lesson = args.get("lesson") or content or ""
             return memory.save_lesson(lesson)
 
         elif name == "read_file":
             return _read_file(
-                args.get("filepath", ""),
+                filename,
                 args.get("start_line", 0),
                 args.get("max_lines", 50)
             )
@@ -120,7 +123,7 @@ def execute_action(name, args):
             return _http_request(
                 args.get("url", ""),
                 args.get("method", "GET"),
-                args.get("body", ""),
+                content or "",
                 args.get("headers", "")
             )
 
@@ -128,27 +131,29 @@ def execute_action(name, args):
             from github_sync import publish_blog_post
             return publish_blog_post(
                 args.get("title", "Untitled"),
-                args.get("content", ""),
+                content or "",
                 args.get("category", "update")
             )
 
         elif name == "publish_skill":
             from github_sync import publish_skill
-            return publish_skill(args.get("filename", ""))
+            return publish_skill(filename)
 
         elif name == "publish_project_file":
             from github_sync import publish_project_file
+            project = args.get("project_name") or args.get("project") or ""
             return publish_project_file(
-                args.get("project_name", ""),
-                args.get("filename", ""),
-                args.get("content", "")
+                project,
+                filename,
+                content or ""
             )
 
         elif name == "ask_human":
-            return _ask_human(args.get("question", ""))
+            question = args.get("question") or content or ""
+            return _ask_human(question)
 
         elif name == "write_local_file":
-            return _write_local_file(args.get("filepath", ""), args.get("content", ""))
+            return _write_local_file(filename, content)
 
         elif name == "defer_to_flex":
             # This is handled by agent_core, not action_router
