@@ -6,6 +6,7 @@ import memory
 import budget
 import telegram_bot
 from action_router import execute_action
+from secrets import GH_PUBLIC_REPO
 from prompts import SYSTEM_BASE, ONBOARDING_PROMPT, ROLES
 
 # Shared flex queue — Core 0 pushes, Core 1 pops
@@ -29,8 +30,23 @@ def _build_system_prompt():
     budget_str = budget.get_budget_prompt_string()
     tasks = memory.get_active_tasks()
     task_str = "; ".join(tasks[:5]) if tasks else "No active tasks."
-    journal_tail = memory.get_journal_tail(3)
-    journal_str = "\n".join(journal_tail) if journal_tail else "No recent activity."
+    
+    # --- Optimization: Journal Pruning ---
+    # Filter out low-signal logs like 'Tool [name]: Success' or 'done'
+    journal_raw = memory.get_journal_tail(12)
+    filtered_journal = []
+    for entry in journal_raw:
+        entry_lower = entry.lower()
+        # Keep user messages, errors, and significant tool results (not just 'Success')
+        if "user:" in entry_lower or "error:" in entry_lower or "lesson:" in entry_lower:
+            filtered_journal.append(entry)
+        elif "tool" in entry_lower and not ("success" in entry_lower or "done" in entry_lower):
+            filtered_journal.append(entry)
+        elif len(filtered_journal) < 5: # Always keep a few recent ones for flow
+            filtered_journal.append(entry)
+    
+    journal_str = "\n".join(filtered_journal[-6:]) if filtered_journal else "No recent activity."
+    
     goal = memory.get_daily_goal()
     lessons = memory.get_lessons(3)
     lesson_str = "\n".join(f"- {l}" for l in lessons) if lessons else "None yet."
@@ -46,18 +62,33 @@ def _build_system_prompt():
     sys_prefix = SYSTEM_BASE.format(
         name=identity["name"],
         mission=identity["mission"],
-        tone=identity["tone"]
+        tone=identity["tone"],
+        public_repo=GH_PUBLIC_REPO
     )
     return sys_prefix + dynamic
 
 
 def _build_subagent_prompt(role, task, scratchpad=""):
     """Build a minimal, focused prompt for a subagent call."""
+    from prompts import SYSTEM_SUBAGENT_BASE, SYSTEM_BLOGGER_BASE
+    identity = memory.get_identity()
+    
+    if role == "blogger":
+        sys_prefix = SYSTEM_BLOGGER_BASE.format(
+            name=identity["name"],
+            mission=identity["mission"],
+            tone=identity["tone"]
+        )
+    else:
+        sys_prefix = SYSTEM_SUBAGENT_BASE.format(name=identity["name"])
+    
     role_prompt = ROLES.get(role, ROLES["researcher"])
+    full_sys = sys_prefix + "\n" + role_prompt
+    
     content = f"TASK: {task}"
     if scratchpad:
         content += f"\n\nPREVIOUS CONTEXT:\n{scratchpad}"
-    return role_prompt, [{"role": "user", "parts": [{"text": content}]}]
+    return full_sys, [{"role": "user", "parts": [{"text": content}]}]
 
 
 def _detect_loop(tool_name):
@@ -419,7 +450,7 @@ def _run_horizon_reflection():
     messages = [{"role": "user", "parts": [{"text": prompt}]}]
 
     result = api_client.call_gemini_sync(
-        messages, model=api_client.MODEL_3_FLASH,
+        messages, model=api_client.MODEL_31_LITE,
         sys_instr=_build_system_prompt(), tier="flex",
         thinking_level="low", call_type="blog"
     )

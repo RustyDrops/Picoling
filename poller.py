@@ -58,6 +58,17 @@ def _handle_status():
     return f"Goal: {goal[:100]}\nBackground: {task}\nTasks:\n{t_str}"
 
 
+def _handle_goal():
+    return f"Current Goal: {memory.get_daily_goal()}"
+
+
+def _handle_tasks():
+    tasks = memory.get_active_tasks()
+    if not tasks:
+        return "Task queue is empty."
+    return "Tasks:\n" + "\n".join(f"- {t}" for t in tasks)
+
+
 def _handle_ghost(args):
     if args == "on":
         memory.state["ghost_mode"] = True
@@ -141,6 +152,26 @@ async def poll_loop(wdt):
                 # Handle human ticket responses (#Q prefix)
                 if text.startswith("#Q"):
                     _handle_ticket_response(text)
+                    continue
+
+                # --- NEW: NL Short-Circuit Router ---
+                # Intercept common natural language intents to save API costs
+                text_lower = text.lower()
+                
+                if text_lower.startswith("add task:"):
+                    task_desc = text[9:].strip()
+                    response = memory.manage_tasks("add", task_desc)
+                    telegram_bot.send_telegram_msg(f"✅ Task Added (Local): {task_desc}")
+                    continue
+                
+                if text_lower.startswith("set goal:"):
+                    goal_desc = text[9:].strip()
+                    memory.set_daily_goal(goal_desc)
+                    telegram_bot.send_telegram_msg(f"🎯 Goal Set (Local): {goal_desc}")
+                    continue
+
+                if text_lower in ("what is my goal?", "status report", "pico status"):
+                    telegram_bot.send_telegram_msg(_handle_status())
                     continue
 
                 # Handle . commands
